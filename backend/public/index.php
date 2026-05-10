@@ -145,6 +145,27 @@ function initDatabase($pdo) {
             available TINYINT(1) DEFAULT 1
         )
     ");
+    
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS schedules (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            volunteer_id INT NOT NULL,
+            position_id INT NOT NULL,
+            schedule_date DATE NOT NULL,
+            shift_start TIME NOT NULL,
+            shift_end TIME NOT NULL,
+            status VARCHAR(20) DEFAULT 'scheduled',
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+    ");
+    
+    $pdo->exec("
+        ALTER TABLE schedules 
+        MODIFY COLUMN volunteer_id INT NOT NULL,
+        MODIFY COLUMN position_id INT NOT NULL
+    ");
 }
 
 initDatabase($pdo);
@@ -216,7 +237,8 @@ if ($uri === '/' || $uri === '/api') {
             'honor_awards' => 'GET/POST /api/honor-awards',
             'points' => 'GET/POST /api/points',
             'point_exchanges' => 'GET/POST /api/point-exchanges',
-            'rewards' => 'GET/POST /api/rewards'
+            'rewards' => 'GET/POST /api/rewards',
+            'schedules' => 'GET/POST /api/schedules, PUT/DELETE /api/schedules/{id}'
         ]
     ]);
 }
@@ -405,6 +427,73 @@ switch ($uri) {
             $stmt = $pdo->prepare("INSERT INTO rewards (name, points_required, description) VALUES (?, ?, ?)");
             $stmt->execute([$data['name'], $data['points_required'], $data['description'] ?? null]);
             jsonResponse(['id' => $pdo->lastInsertId(), 'message' => 'Reward created']);
+        }
+        break;
+        
+    case strpos($uri, '/api/schedules') === 0:
+        if ($uri === '/api/schedules' && $method === 'GET') {
+            $stmt = $pdo->query("
+                SELECT s.*, v.name as volunteer_name, p.name as position_name 
+                FROM schedules s 
+                LEFT JOIN volunteers v ON s.volunteer_id = v.id 
+                LEFT JOIN positions p ON s.position_id = p.id 
+                ORDER BY s.schedule_date DESC, s.shift_start ASC
+            ");
+            jsonResponse(['data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+        }
+        if ($uri === '/api/schedules' && $method === 'POST') {
+            $data = getInput(['volunteer_id', 'position_id', 'schedule_date', 'shift_start', 'shift_end', 'status', 'notes'], ['volunteer_id', 'position_id', 'schedule_date', 'shift_start', 'shift_end']);
+            $stmt = $pdo->prepare("INSERT INTO schedules (volunteer_id, position_id, schedule_date, shift_start, shift_end, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([
+                $data['volunteer_id'] ?? null,
+                $data['position_id'] ?? null,
+                $data['schedule_date'],
+                $data['shift_start'],
+                $data['shift_end'],
+                $data['status'] ?? 'scheduled',
+                $data['notes'] ?? null
+            ]);
+            jsonResponse(['id' => $pdo->lastInsertId(), 'message' => 'Schedule created']);
+        }
+        if (preg_match('#/api/schedules/(\d+)$#', $uri, $matches)) {
+            $id = $matches[1];
+            if ($method === 'GET') {
+                $stmt = $pdo->prepare("
+                    SELECT s.*, v.name as volunteer_name, p.name as position_name 
+                    FROM schedules s 
+                    LEFT JOIN volunteers v ON s.volunteer_id = v.id 
+                    LEFT JOIN positions p ON s.position_id = p.id 
+                    WHERE s.id = ?
+                ");
+                $stmt->execute([$id]);
+                $schedule = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!$schedule) jsonResponse(['error' => 'Schedule not found'], 404);
+                jsonResponse(['data' => $schedule]);
+            }
+            if ($method === 'PUT') {
+                $data = getInput(['volunteer_id', 'position_id', 'schedule_date', 'shift_start', 'shift_end', 'status', 'notes'], ['volunteer_id', 'position_id']);
+                $stmt = $pdo->prepare("
+                    UPDATE schedules 
+                    SET volunteer_id=?, position_id=?, schedule_date=?, shift_start=?, shift_end=?, status=?, notes=? 
+                    WHERE id=?
+                ");
+                $stmt->execute([
+                    $data['volunteer_id'],
+                    $data['position_id'],
+                    $data['schedule_date'] ?? null,
+                    $data['shift_start'] ?? null,
+                    $data['shift_end'] ?? null,
+                    $data['status'] ?? 'scheduled',
+                    $data['notes'] ?? null,
+                    $id
+                ]);
+                jsonResponse(['message' => 'Schedule updated']);
+            }
+            if ($method === 'DELETE') {
+                $stmt = $pdo->prepare("DELETE FROM schedules WHERE id = ?");
+                $stmt->execute([$id]);
+                jsonResponse(['message' => 'Schedule deleted']);
+            }
         }
         break;
 }
