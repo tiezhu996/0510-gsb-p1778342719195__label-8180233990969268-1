@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recent Activities Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }
+        h1 { color: #1565c0; }
+        .activity { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid #eee; }
+        .activity .icon { font-size: 24px; margin-right: 12px; }
+        .activity .content { flex: 1; }
+        .activity .title { font-weight: 500; color: #333; }
+        .activity .desc { font-size: 12px; color: #666; margin-top: 2px; }
+        .activity .time { font-size: 12px; color: #999; }
+        #result { margin-top: 20px; padding: 10px; background: #e3f2fd; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>最近活动测试</h1>
+        <div id="activities"></div>
+        <div id="result">状态: 加载中...</div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        
+        async function api(endpoint) {
+            const res = await fetch(API_BASE + endpoint);
+            return res.json();
+        }
+        
+        async function loadActivities() {
+            const result = document.getElementById('result');
+            const container = document.getElementById('activities');
+            
+            try {
+                result.textContent = '状态: 正在加载数据...';
+                
+                const [hours, attendance, ratings, evaluations, honorAwards, points, exchanges] = await Promise.all([
+                    api('/api/service-hours'),
+                    api('/api/attendance'),
+                    api('/api/star-ratings'),
+                    api('/api/evaluations'),
+                    api('/api/honor-awards'),
+                    api('/api/points'),
+                    api('/api/point-exchanges')
+                ]);
+                
+                result.textContent = '状态: 数据加载成功!';
+                
+                const activities = [];
+                
+                (hours.data || []).forEach(h => {
+                    activities.push({
+                        type: 'service',
+                        icon: '⏱️',
+                        title: '服务时长记录',
+                        description: `${h.volunteer_name || '志愿者'} - ${h.hours}小时`,
+                        time: h.created_at
+                    });
+                });
+                
+                (attendance.data || []).forEach(a => {
+                    activities.push({
+                        type: 'attendance',
+                        icon: '📍',
+                        title: a.check_out ? '签退完成' : '签到成功',
+                        description: `${a.volunteer_name || '志愿者'}`,
+                        time: a.created_at
+                    });
+                });
+                
+                (ratings.data || []).forEach(r => {
+                    activities.push({
+                        type: 'rating',
+                        icon: '⭐',
+                        title: `获得${r.stars}星评定`,
+                        description: `${r.volunteer_name || '志愿者'}`,
+                        time: r.created_at
+                    });
+                });
+                
+                (evaluations.data || []).forEach(e => {
+                    activities.push({
+                        type: 'evaluation',
+                        icon: '💬',
+                        title: '收到服务评价',
+                        description: `${e.volunteer_name || '志愿者'} - 评分${e.rating}分`,
+                        time: e.created_at
+                    });
+                });
+                
+                (honorAwards.data || []).forEach(h => {
+                    activities.push({
+                        type: 'honor',
+                        icon: '🏅',
+                        title: '获得荣誉',
+                        description: `${h.volunteer_name || '志愿者'} - ${h.honor_name || ''}`,
+                        time: h.awarded_at
+                    });
+                });
+                
+                (points.data || []).forEach(p => {
+                    activities.push({
+                        type: 'points',
+                        icon: '🎁',
+                        title: '积分发放',
+                        description: `${p.volunteer_name || '志愿者'} +${p.points}积分`,
+                        time: p.created_at
+                    });
+                });
+                
+                (exchanges.data || []).forEach(e => {
+                    activities.push({
+                        type: 'exchange',
+                        icon: '🛒',
+                        title: '积分兑换',
+                        description: `${e.volunteer_name || '志愿者'} -${e.points_used}积分`,
+                        time: e.exchanged_at
+                    });
+                });
+                
+                activities.sort((a, b) => new Date(b.time) - new Date(a.time));
+                const recent = activities.slice(0, 10);
+                
+                if (recent.length === 0) {
+                    container.innerHTML = '<p style="color:#999;text-align:center;padding:20px;">暂无活动记录</p>';
+                    return;
+                }
+                
+                container.innerHTML = recent.map(a => `
+                    <div class="activity">
+                        <span class="icon">${a.icon}</span>
+                        <div class="content">
+                            <div class="title">${a.title}</div>
+                            <div class="desc">${a.description}</div>
+                        </div>
+                        <span class="time">${formatTime(a.time)}</span>
+                    </div>
+                `).join('');
+                
+                console.log('Activities loaded:', recent.length);
+                
+            } catch (error) {
+                result.textContent = '状态: 错误 - ' + error.message;
+                console.error(error);
+            }
+        }
+        
+        function formatTime(timeStr) {
+            if (!timeStr) return '';
+            const date = new Date(timeStr);
+            const now = new Date();
+            const diff = now - date;
+            
+            if (diff < 60000) return '刚刚';
+            if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
+            if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
+            if (diff < 604800000) return Math.floor(diff / 86400000) + '天前';
+            
+            return date.toLocaleDateString('zh-CN');
+        }
+        
+        loadActivities();
+    </script>
+</body>
+</html>

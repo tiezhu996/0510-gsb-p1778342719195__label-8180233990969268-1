@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Volunteer Platform - Direct Test</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #1565c0; margin-bottom: 20px; }
+        button { padding: 10px 20px; background: #1565c0; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #0d47a1; }
+        .output { background: #263238; color: #aed581; padding: 15px; border-radius: 5px; margin-top: 20px; white-space: pre-wrap; font-family: monospace; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin: 20px 0; }
+        .stat { background: #e3f2fd; padding: 15px; border-radius: 5px; text-align: center; }
+        .stat h3 { color: #1565c0; font-size: 28px; }
+        .stat p { color: #666; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #e3f2fd; color: #1565c0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏥 医院志愿者服务平台 - 直接测试</h1>
+        
+        <div class="stats">
+            <div class="stat"><h3 id="vol-count">-</h3><p>志愿者</p></div>
+            <div class="stat"><h3 id="hour-count">-</h3><p>服务时长</p></div>
+            <div class="stat"><h3 id="attend-count">-</h3><p>考勤</p></div>
+            <div class="stat"><h3 id="point-count">-</h3><p>积分</p></div>
+        </div>
+        
+        <button onclick="loadData()">🔄 刷新数据</button>
+        <button onclick="addTestVolunteer()">➕ 添加测试志愿者</button>
+        <button onclick="clearOutput()">🗑️ 清除输出</button>
+        
+        <h2 style="margin-top: 20px;">志愿者列表</h2>
+        <table>
+            <thead><tr><th>ID</th><th>姓名</th><th>电话</th><th>创建时间</th></tr></thead>
+            <tbody id="volunteer-list"></tbody>
+        </table>
+        
+        <h2>调试输出</h2>
+        <div class="output" id="output">等待操作...</div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        const output = document.getElementById('output');
+        
+        function log(msg, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️';
+            output.textContent = `${timestamp} ${prefix} ${msg}\n` + output.textContent;
+            console.log(msg);
+        }
+        
+        function clearOutput() {
+            output.textContent = '已清除';
+        }
+        
+        async function api(endpoint, method = 'GET', data = null) {
+            const opts = { method, headers: { 'Content-Type': 'application/json' } };
+            if (data) opts.body = JSON.stringify(data);
+            
+            log(`请求: ${method} ${API_BASE}${endpoint}`);
+            
+            try {
+                const res = await fetch(API_BASE + endpoint, opts);
+                const statusInfo = `${res.status} ${res.statusText}`;
+                log(`响应状态: ${statusInfo}`, res.ok ? 'success' : 'error');
+                
+                const contentType = res.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const json = await res.json();
+                    log(`响应数据: ${JSON.stringify(json).substring(0, 200)}...`);
+                    return json;
+                } else {
+                    const text = await res.text();
+                    log(`响应文本: ${text.substring(0, 200)}...`);
+                    return text;
+                }
+            } catch (error) {
+                log(`请求失败: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+        
+        async function loadData() {
+            log('开始加载数据...');
+            
+            try {
+                // Load volunteers
+                const volunteers = await api('/api/volunteers');
+                const volCount = volunteers.data?.length || 0;
+                document.getElementById('vol-count').textContent = volCount;
+                
+                // Update table
+                const tbody = document.getElementById('volunteer-list');
+                tbody.innerHTML = (volunteers.data || []).map(v => `
+                    <tr><td>${v.id}</td><td>${v.name}</td><td>${v.phone || '-'}</td><td>${v.created_at}</td></tr>
+                `).join('') || '<tr><td colspan="4">暂无数据</td></tr>';
+                
+                // Load service hours
+                const hours = await api('/api/service-hours');
+                const totalHours = hours.data?.reduce((sum, h) => sum + parseFloat(h.hours || 0), 0) || 0;
+                document.getElementById('hour-count').textContent = totalHours.toFixed(1);
+                
+                // Load attendance
+                const attendance = await api('/api/attendance');
+                document.getElementById('attend-count').textContent = attendance.data?.length || 0;
+                
+                // Load points
+                const points = await api('/api/points');
+                const totalPoints = points.data?.reduce((sum, p) => sum + parseInt(p.points || 0), 0) || 0;
+                document.getElementById('point-count').textContent = totalPoints;
+                
+                log('数据加载完成!', 'success');
+            } catch (error) {
+                log(`加载失败: ${error.message}`, 'error');
+            }
+        }
+        
+        async function addTestVolunteer() {
+            const name = '测试用户_' + Date.now().toString().slice(-4);
+            log(`添加志愿者: ${name}`);
+            
+            try {
+                const result = await api('/api/volunteers', 'POST', {
+                    name: name,
+                    phone: '12345678901',
+                    email: 'test@example.com'
+                });
+                
+                if (result.id) {
+                    log(`志愿者创建成功! ID: ${result.id}`, 'success');
+                    loadData(); // Refresh
+                } else {
+                    log(`创建失败: ${JSON.stringify(result)}`, 'error');
+                }
+            } catch (error) {
+                log(`创建失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // Auto-load on page start
+        window.onload = () => {
+            log('页面加载完成，开始初始化...');
+            loadData();
+        };
+    </script>
+</body>
+</html>

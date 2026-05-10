@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Test - Hospital Volunteer Platform</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .test { padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .pass { background: #e8f5e9; color: #2e7d32; }
+        .fail { background: #ffebee; color: #c62828; }
+        .pending { background: #fff3e0; color: #e65100; }
+        pre { background: #263238; color: #aed581; padding: 10px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>API Connection Test</h1>
+    <div id="results"></div>
+    <h2>Browser Console Output</h2>
+    <pre id="console"></pre>
+    
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        const results = document.getElementById('results');
+        const consoleOutput = document.getElementById('console');
+        
+        function log(msg) {
+            consoleOutput.textContent += msg + '\n';
+            console.log(msg);
+        }
+        
+        function addResult(name, status, message, details = '') {
+            const div = document.createElement('div');
+            div.className = 'test ' + status.toLowerCase();
+            div.innerHTML = `<strong>${name}</strong>: ${message} ${details ? '<br><small>' + details + '</small>' : ''}`;
+            results.appendChild(div);
+        }
+        
+        async function testAPI() {
+            log('Starting API tests at ' + new Date().toISOString());
+            log('API_BASE: ' + API_BASE);
+            log('Browser: ' + navigator.userAgent);
+            
+            // Test 1: Check if API is accessible
+            log('\n--- Test 1: Health Check ---');
+            try {
+                const res = await fetch(API_BASE + '/health');
+                const data = await res.json();
+                log('Health check response: ' + JSON.stringify(data));
+                addResult('Health Check', data.status === 'ok' ? 'PASS' : 'FAIL', data.status);
+            } catch (error) {
+                log('Health check error: ' + error.message);
+                addResult('Health Check', 'FAIL', error.message);
+            }
+            
+            // Test 2: List volunteers
+            log('\n--- Test 2: List Volunteers ---');
+            try {
+                const res = await fetch(API_BASE + '/api/volunteers');
+                log('Volunteers response status: ' + res.status);
+                log('Response headers: ' + [...res.headers.entries()].map(h => h[0] + ': ' + h[1]).join(', '));
+                const data = await res.json();
+                log('Volunteers response: ' + JSON.stringify(data).substring(0, 200));
+                addResult('List Volunteers', res.ok ? 'PASS' : 'FAIL', 
+                    res.ok ? 'Found ' + (data.data?.length || 0) + ' volunteers' : 'Error',
+                    'Status: ' + res.status);
+            } catch (error) {
+                log('Volunteers error: ' + error.message);
+                addResult('List Volunteers', 'FAIL', error.message);
+            }
+            
+            // Test 3: Create volunteer
+            log('\n--- Test 3: Create Volunteer ---');
+            try {
+                const res = await fetch(API_BASE + '/api/volunteers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: 'BrowserTest', phone: '12345678901' })
+                });
+                log('Create response status: ' + res.status);
+                const data = await res.json();
+                log('Create response: ' + JSON.stringify(data));
+                addResult('Create Volunteer', res.ok ? 'PASS' : 'FAIL', 
+                    res.ok ? 'Created ID: ' + data.id : 'Error',
+                    'Status: ' + res.status);
+            } catch (error) {
+                log('Create error: ' + error.message);
+                addResult('Create Volunteer', 'FAIL', error.message);
+            }
+            
+            // Test 4: CORS headers
+            log('\n--- Test 4: CORS Headers ---');
+            try {
+                const res = await fetch(API_BASE + '/api/volunteers', { method: 'OPTIONS' });
+                const corsHeaders = {
+                    'Access-Control-Allow-Origin': res.headers.get('Access-Control-Allow-Origin'),
+                    'Access-Control-Allow-Methods': res.headers.get('Access-Control-Allow-Methods'),
+                    'Access-Control-Allow-Headers': res.headers.get('Access-Control-Allow-Headers')
+                };
+                log('CORS headers: ' + JSON.stringify(corsHeaders));
+                addResult('CORS Headers', 
+                    corsHeaders['Access-Control-Allow-Origin'] ? 'PASS' : 'FAIL',
+                    corsHeaders['Access-Control-Allow-Origin'] || 'Missing');
+            } catch (error) {
+                log('CORS error: ' + error.message);
+                addResult('CORS Headers', 'FAIL', error.message);
+            }
+            
+            log('\n--- All tests completed ---');
+        }
+        
+        testAPI();
+    </script>
+</body>
+</html>
