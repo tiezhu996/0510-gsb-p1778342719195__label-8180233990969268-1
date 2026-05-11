@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { padding: 10px; margin: 5px 0; border-radius: 3px; }
+        .pass { background: #d4edda; color: #155724; }
+        .fail { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>Simple API Test</h1>
+    <button onclick="runTests()">Run Tests</button>
+    <div id="results"></div>
+    
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        
+        async function test(endpoint, name) {
+            const div = document.createElement('div');
+            div.className = 'result';
+            try {
+                const res = await fetch(API_BASE + endpoint);
+                const data = await res.json();
+                div.className += ' pass';
+                div.textContent = `✓ ${name}: OK (${JSON.stringify(data).substring(0, 50)}...)`;
+            } catch (error) {
+                div.className += ' fail';
+                div.textContent = `✗ ${name}: ${error.message}`;
+            }
+            document.getElementById('results').appendChild(div);
+        }
+        
+        async function runTests() {
+            document.getElementById('results').innerHTML = '';
+            await test('/health', 'Health Check');
+            await test('/api', 'API Info');
+            await test('/api/volunteers', 'Volunteers List');
+            await test('/api/service-hours', 'Service Hours');
+            await test('/api/attendance', 'Attendance');
+        }
+        
+        // Auto-run on load
+        runTests();
+    </script>
+</body>
+</html>
