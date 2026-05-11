@@ -37,6 +37,7 @@ No additional parameters required. The command must work without any modificatio
 | F1 档案管理 | Volunteer archive management (CRUD) |
 | F2 服务时长 | Service hours tracking and recording |
 | F3 考勤管理 | Attendance management (check-in/check-out) |
+| F3.1 排班管理 | Schedule management (volunteer shift scheduling) |
 | F4 星级评定 | Star rating system and incentives |
 | F5 岗位分配 | Position/role assignment for volunteers |
 | F6 服务评价 | Service evaluation (feedback system) |
@@ -53,11 +54,12 @@ No additional parameters required. The command must work without any modificatio
 4. Add a volunteer via "志愿者管理" → "添加志愿者"
 5. Record service hours via "服务时长" → "记录时长"
 6. Check in/out via "考勤管理"
-7. Assign positions via "岗位分配"
-8. Rate stars via "星级评定"
-9. Submit evaluations via "服务评价"
-10. Award honors via "荣誉体系"
-11. Manage points via "积分管理"
+7. Manage schedules via "排班管理"
+8. Assign positions via "岗位分配"
+9. Rate stars via "星级评定"
+10. Submit evaluations via "服务评价"
+11. Award honors via "荣誉体系"
+12. Manage points via "积分管理"
 
 ### Failure Path
 
@@ -137,6 +139,7 @@ The following environment variables are pre-configured in docker-compose.yml:
 - points: Points records
 - point_exchanges: Points redemption
 - rewards: Redeemable rewards
+- schedules: Volunteer shift schedules
 
 ## Development
 
