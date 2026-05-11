@@ -68,6 +68,7 @@
         <button class="active" data-section="dashboard">首页</button>
         <button data-section="volunteers">志愿者管理</button>
         <button data-section="attendance">考勤管理</button>
+        <button data-section="schedules">排班管理</button>
         <button data-section="service-hours">服务时长</button>
         <button data-section="positions">岗位分配</button>
         <button data-section="ratings">星级评定</button>
@@ -124,6 +125,19 @@
                     <tr><th>ID</th><th>志愿者</th><th>签到时间</th><th>签退时间</th><th>状态</th></tr>
                 </thead>
                 <tbody id="attendance-list"></tbody>
+            </table>
+        </div>
+        <div id="schedules" class="section">
+            <h2>📅 排班管理</h2>
+            <div class="action-bar">
+                <div class="search-box"><input type="text" id="search-schedule" placeholder="搜索排班..." onkeyup="searchSchedules()"></div>
+                <button class="btn btn-primary" onclick="showScheduleModal()">➕ 添加排班</button>
+            </div>
+            <table>
+                <thead>
+                    <tr><th>ID</th><th>志愿者</th><th>岗位</th><th>日期</th><th>班次</th><th>状态</th><th>备注</th><th>操作</th></tr>
+                </thead>
+                <tbody id="schedules-list"></tbody>
             </table>
         </div>
         <div id="service-hours" class="section">
@@ -371,12 +385,33 @@
             <button class="btn btn-primary" onclick="addReward()">保存</button>
         </div>
     </div>
+    <div id="schedule-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header"><h3 id="schedule-modal-title">添加排班</h3><span class="close" onclick="hideModal('schedule-modal')">&times;</span></div>
+            <input type="hidden" id="schedule-id">
+            <div class="form-group"><label>志愿者 *</label><select id="schedule-volunteer"></select></div>
+            <div class="form-group"><label>岗位 *</label><select id="schedule-position"></select></div>
+            <div class="form-group"><label>日期 *</label><input type="date" id="schedule-date"></div>
+            <div class="form-group"><label>上班时间 *</label><input type="time" id="schedule-start"></div>
+            <div class="form-group"><label>下班时间 *</label><input type="time" id="schedule-end"></div>
+            <div class="form-group"><label>状态</label><select id="schedule-status">
+                <option value="scheduled">已排班</option>
+                <option value="confirmed">已确认</option>
+                <option value="completed">已完成</option>
+                <option value="cancelled">已取消</option>
+                <option value="absent">缺席</option>
+            </select></div>
+            <div class="form-group"><label>备注</label><textarea id="schedule-notes"></textarea></div>
+            <button class="btn btn-primary" onclick="saveSchedule()">保存</button>
+        </div>
+    </div>
     <script>
         const API_BASE = 'http://localhost:8000';
         let volunteers = [], positions = [], rewards = [];
         let hours = { data: [] }, attendance = { data: [] }, points = { data: [] };
         let assignments = { data: [] }, ratings = { data: [] }, evaluations = { data: [] };
         let honors = { data: [] }, honorAwards = { data: [] }, exchanges = { data: [] };
+        let schedules = { data: [] };
         
         async function api(endpoint, method = 'GET', data = null) {
             try {
@@ -409,7 +444,8 @@
                     api('/api/evaluations'),
                     api('/api/honors'),
                     api('/api/honor-awards'),
-                    api('/api/point-exchanges')
+                    api('/api/point-exchanges'),
+                    api('/api/schedules')
                 ]);
                 
                 volunteers = results[0] || { data: [] };
@@ -424,6 +460,7 @@
                 honors = results[9] || { data: [] };
                 honorAwards = results[10] || { data: [] };
                 exchanges = results[11] || { data: [] };
+                schedules = results[12] || { data: [] };
                 
                 document.getElementById('stat-volunteers').textContent = volunteers.data?.length || 0;
                 const totalHours = hours.data?.reduce((sum, h) => sum + parseFloat(h.hours || 0), 0) || 0;
@@ -446,6 +483,7 @@
                 renderPoints();
                 renderExchanges();
                 renderRewards();
+                renderSchedules();
                 renderRecentActivities();
                 populateSelects();
                 
@@ -743,6 +781,11 @@
                 if (el) el.innerHTML = '<option value="">请选择</option>' + positionOpts;
             });
             
+            const scheduleVolunteer = document.getElementById('schedule-volunteer');
+            if (scheduleVolunteer) scheduleVolunteer.innerHTML = '<option value="">请选择</option>' + volunteerOpts;
+            const schedulePosition = document.getElementById('schedule-position');
+            if (schedulePosition) schedulePosition.innerHTML = '<option value="">请选择</option>' + positionOpts;
+            
             ['honor-award-honor'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.innerHTML = '<option value="">请选择</option>' + (honors?.data || []).map(h => `<option value="${h.id}">${h.name}</option>`).join('');
@@ -905,6 +948,112 @@
             renderRewards();
             populateSelects();
             showMessage('商品添加成功', 'success');
+        }
+        
+        function getStatusBadge(status) {
+            const statusMap = {
+                'scheduled': { class: 'badge-active', text: '已排班' },
+                'confirmed': { class: 'badge-active', text: '已确认' },
+                'completed': { class: 'badge-active', text: '已完成' },
+                'cancelled': { class: 'badge-inactive', text: '已取消' },
+                'absent': { class: 'badge-inactive', text: '缺席' }
+            };
+            const s = statusMap[status] || { class: 'badge-active', text: status };
+            return `<span class="badge ${s.class}">${s.text}</span>`;
+        }
+        
+        function renderSchedules(filteredData = null) {
+            const tbody = document.getElementById('schedules-list');
+            const data = filteredData || (schedules?.data || []);
+            tbody.innerHTML = data.map(s => `
+                <tr>
+                    <td>${s.id}</td>
+                    <td>${s.volunteer_name || '-'}</td>
+                    <td>${s.position_name || '-'}</td>
+                    <td>${s.schedule_date}</td>
+                    <td>${s.shift_start} - ${s.shift_end}</td>
+                    <td>${getStatusBadge(s.status)}</td>
+                    <td>${s.notes || '-'}</td>
+                    <td>
+                        <button class="btn btn-primary" style="padding:5px 10px;font-size:12px" onclick="editSchedule(${s.id})">编辑</button>
+                        <button class="btn btn-danger" style="padding:5px 10px;font-size:12px" onclick="deleteSchedule(${s.id})">删除</button>
+                    </td>
+                </tr>
+            `).join('') || '<tr><td colspan="8" class="empty">暂无排班记录</td></tr>';
+        }
+        
+        function showScheduleModal(schedule = null) {
+            document.getElementById('schedule-modal-title').textContent = schedule ? '编辑排班' : '添加排班';
+            document.getElementById('schedule-id').value = schedule?.id || '';
+            document.getElementById('schedule-volunteer').value = schedule?.volunteer_id || '';
+            document.getElementById('schedule-position').value = schedule?.position_id || '';
+            document.getElementById('schedule-date').value = schedule?.schedule_date || '';
+            document.getElementById('schedule-start').value = schedule?.shift_start || '';
+            document.getElementById('schedule-end').value = schedule?.shift_end || '';
+            document.getElementById('schedule-status').value = schedule?.status || 'scheduled';
+            document.getElementById('schedule-notes').value = schedule?.notes || '';
+            showModal('schedule-modal');
+        }
+        
+        async function editSchedule(id) {
+            const schedule = schedules.data?.find(s => s.id == id);
+            if (schedule) showScheduleModal(schedule);
+        }
+        
+        async function saveSchedule() {
+            const id = document.getElementById('schedule-id').value;
+            const volunteerId = document.getElementById('schedule-volunteer').value;
+            const positionId = document.getElementById('schedule-position').value;
+            const data = {
+                volunteer_id: volunteerId || null,
+                position_id: positionId || null,
+                schedule_date: document.getElementById('schedule-date').value,
+                shift_start: document.getElementById('schedule-start').value,
+                shift_end: document.getElementById('schedule-end').value,
+                status: document.getElementById('schedule-status').value,
+                notes: document.getElementById('schedule-notes').value
+            };
+            if (!volunteerId) {
+                return showMessage('请选择志愿者', 'error');
+            }
+            if (!positionId) {
+                return showMessage('请选择岗位', 'error');
+            }
+            if (!data.schedule_date || !data.shift_start || !data.shift_end) {
+                return showMessage('请填写日期和班次时间', 'error');
+            }
+            if (id) {
+                await api(`/api/schedules/${id}`, 'PUT', data);
+                showMessage('排班更新成功', 'success');
+            } else {
+                await api('/api/schedules', 'POST', data);
+                showMessage('排班添加成功', 'success');
+            }
+            hideModal('schedule-modal');
+            schedules = await api('/api/schedules');
+            renderSchedules();
+        }
+        
+        async function deleteSchedule(id) {
+            if (!confirm('确定删除此排班?')) return;
+            await api(`/api/schedules/${id}`, 'DELETE');
+            schedules = await api('/api/schedules');
+            renderSchedules();
+            showMessage('删除成功', 'success');
+        }
+        
+        async function searchSchedules() {
+            const term = document.getElementById('search-schedule').value.toLowerCase();
+            if (!term) {
+                renderSchedules();
+                return;
+            }
+            const filtered = (schedules.data || []).filter(s => 
+                (s.volunteer_name || '').toLowerCase().includes(term) ||
+                (s.position_name || '').toLowerCase().includes(term) ||
+                (s.schedule_date || '').includes(term)
+            );
+            renderSchedules(filtered);
         }
         
         function showMessage(msg, type) {
